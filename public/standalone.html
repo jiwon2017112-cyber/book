@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>도서관 및 열람실 예약</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Pretendard Font -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css">
+  <style>
+    body { font-family: 'Pretendard', sans-serif; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+  <!-- 헤더 -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
+    <div class="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <div class="w-9 h-9 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-lg">
+          📚
+        </div>
+        <div>
+          <h1 class="font-bold text-lg text-slate-900 leading-none">도서관 & 열람실 예약</h1>
+          <span class="text-[11px] text-slate-400">Google Apps Script 연동</span>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button id="btnOpenMyRes" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 cursor-pointer">
+          <span>내 예약</span>
+          <span id="resBadge" class="hidden bg-blue-600 text-white text-[10px] font-bold px-1.5 rounded-full">0</span>
+        </button>
+        <button id="btnReload" class="p-2 rounded-lg border border-slate-200 text-slate-500 hover:text-blue-600 hover:bg-slate-50 cursor-pointer" title="새로고침">
+          🔄
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 메인 컨텐츠 -->
+  <main class="max-w-5xl mx-auto px-4 py-6 flex-1 w-full space-y-4">
+    <!-- 검색 및 카테고리 필터 -->
+    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-3">
+      <!-- 실시간 검색창 -->
+      <input type="text" id="searchInput" placeholder="도서명, 저자, 좌석 번호(예: A01), 관리번호(B001) 검색..."
+        class="w-full px-3.5 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600" />
+
+      <!-- 카테고리 필터 버튼 (전체 / 도서 / 좌석) & 이용가능 체크박스 -->
+      <div class="flex items-center justify-between gap-2 flex-wrap">
+        <div class="flex items-center gap-1.5">
+          <button class="cat-btn px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white cursor-pointer" data-cat="전체">전체</button>
+          <button class="cat-btn px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 cursor-pointer" data-cat="도서">도서</button>
+          <button class="cat-btn px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 cursor-pointer" data-cat="좌석">좌석</button>
+        </div>
+
+        <label class="flex items-center gap-1.5 text-xs font-medium text-slate-600 cursor-pointer select-none">
+          <input type="checkbox" id="chkOnlyAvailable" class="rounded text-blue-600 focus:ring-blue-500" />
+          <span>이용가능만 보기</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- 카드 리스트 그리드 -->
+    <div id="itemsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5"></div>
+  </main>
+
+  <!-- 푸터 -->
+  <footer class="bg-white border-t border-slate-200 py-4 text-xs text-slate-400 text-center">
+    도서관 및 열람실 예약 시스템
+  </footer>
+
+  <!-- 1. 예약 신청 모달 -->
+  <div id="reservationModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-slate-900/50">
+    <div class="bg-white rounded-2xl max-w-md w-full p-5 shadow-xl border border-slate-200 space-y-4">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+        <h3 class="font-bold text-slate-900 text-base">예약 신청</h3>
+        <button id="btnCloseModal" class="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">✕</button>
+      </div>
+
+      <div class="bg-slate-50 p-3 rounded-lg text-xs space-y-1">
+        <div class="text-slate-400">선택 항목:</div>
+        <div class="font-bold text-slate-900 text-sm" id="modalItemTitle">-</div>
+      </div>
+
+      <form id="reservationForm" class="space-y-3 text-xs">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">신청자 성함 *</label>
+          <input type="text" id="inputName" required placeholder="홍길동" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-blue-600" />
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">이메일 주소 *</label>
+          <input type="email" id="inputEmail" required placeholder="hong@example.com" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-blue-600" />
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">예약 시작일 *</label>
+            <input type="date" id="inputStartDate" required class="w-full px-3 py-2 border border-slate-300 rounded-lg" />
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">예약 종료일 *</label>
+            <input type="date" id="inputEndDate" required class="w-full px-3 py-2 border border-slate-300 rounded-lg" />
+          </div>
+        </div>
+        <div class="pt-2 flex justify-end gap-2">
+          <button type="button" id="btnCancelModal" class="px-4 py-2 rounded-lg text-slate-600 hover:bg-slate-100 font-semibold cursor-pointer">취소</button>
+          <button type="submit" id="btnSubmitReservation" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold cursor-pointer">신청 완료</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 2. 내 예약 모달 -->
+  <div id="myResModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-slate-900/50">
+    <div class="bg-white rounded-2xl max-w-md w-full p-5 shadow-xl border border-slate-200 max-h-[80vh] flex flex-col space-y-4">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-100 shrink-0">
+        <h3 class="font-bold text-slate-900 text-base">내 예약 내역</h3>
+        <button id="btnCloseMyResModal" class="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">✕</button>
+      </div>
+      <div id="myResList" class="overflow-y-auto space-y-2 flex-1 pr-1"></div>
+      <div class="pt-2 flex justify-end shrink-0">
+        <button id="btnCloseMyResModal2" class="px-4 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold cursor-pointer">닫기</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycbz_XKYAKn8pyQpMUcHVzgS_dcChfiKa2oxHxtsD9CXNt0mPKZr-4ha4HAvpmf3QzI7j/exec';
+
+    const SEED_ITEMS = [
+      { id: "B001", title: "정의란 무엇인가", author: "마이클 샌델", category: "인문", status: "이용가능", location: "2층 인문자료실" },
+      { id: "B002", title: "클린 코드 (Clean Code)", author: "로버트 C. 마틴", category: "기술", status: "대출중", location: "3층 디지털기술자료실" },
+      { id: "B003", title: "사피엔스", author: "유발 하라리", category: "역사", status: "이용가능", location: "2층 역사자료실" },
+      { id: "B004", title: "트렌드 코리아 2026", author: "김난도 외", category: "경제/경영", status: "이용가능", location: "2층 경제자료실" },
+      { id: "B005", title: "객체지향의 사실과 오해", author: "조영호", category: "기술", status: "대출중", location: "3층 디지털기술자료실" },
+      { id: "B006", title: "도파민 네이션", author: "애나 렘키", category: "심리", status: "이용가능", location: "2층 교양자료실" },
+      { id: "B007", title: "세이노의 가르침", author: "세이노", category: "자기계발", status: "이용가능", location: "1층 종합자료실" },
+      { id: "B008", title: "리팩터링 2판", author: "마틴 파울러", category: "기술", status: "이용가능", location: "3층 디지털기술자료실" },
+      { id: "B009", title: "마흔에 읽는 쇼펜하우어", author: "강용수", category: "철학", status: "이용가능", location: "2층 인문철학실" },
+      { id: "B010", title: "물고기는 존재하지 않는다", author: "룰루 밀러", category: "과학", status: "이용가능", location: "3층 자연과학실" },
+      { id: "S001", title: "1열람실 - A01 좌석", author: "-", category: "좌석", status: "이용가능", location: "4층 일반열람실 A구역" },
+      { id: "S002", title: "1열람실 - A02 좌석", author: "-", category: "좌석", status: "대출중", location: "4층 일반열람실 A구역" },
+      { id: "S003", title: "1열람실 - A03 좌석 (창가)", author: "-", category: "좌석", status: "이용가능", location: "4층 일반열람실 A구역" },
+      { id: "S004", title: "2열람실 - B01 노트북석", author: "-", category: "좌석", status: "이용가능", location: "4층 멀티미디어 B구역" },
+      { id: "S005", title: "2열람실 - B02 노트북석", author: "-", category: "좌석", status: "이용가능", location: "4층 멀티미디어 B구역" }
+    ];
+
+    let items = [...SEED_ITEMS];
+    let userReservations = JSON.parse(localStorage.getItem('my_reservations') || '[]');
+    let currentCategory = '전체';
+    let searchQuery = '';
+    let onlyAvailable = false;
+    let selectedItem = null;
+
+    function getToday() {
+      return new Date().toISOString().split('T')[0];
+    }
+    function getNextWeek() {
+      const d = new Date();
+      d.setDate(d.getDate() + 7);
+      return d.toISOString().split('T')[0];
+    }
+
+    async function fetchItems() {
+      try {
+        let res = await fetch(GAS_URL + '?action=getItems');
+        let data = await res.json();
+        if (data.success && Array.isArray(data.data) && data.data.length > 0) {
+          items = data.data.map((item, idx) => {
+            const st = String(item.status || '').toLowerCase().trim();
+            const isAvail = st === 'available' || st === '이용가능';
+            return {
+              id: item.id || ('ITEM_' + (idx + 1)),
+              title: item.title || '',
+              author: item.author || '-',
+              category: item.category || '일반',
+              status: isAvail ? '이용가능' : '대출중',
+              location: item.location || ''
+            };
+          });
+        }
+      } catch (e) {
+        console.warn('API 연동 대기:', e);
+      } finally {
+        render();
+        updateBadge();
+      }
+    }
+
+    function updateBadge() {
+      const count = userReservations.filter(r => r.status === '예약중').length;
+      const b = document.getElementById('resBadge');
+      if (count > 0) {
+        b.innerText = count;
+        b.classList.remove('hidden');
+      } else {
+        b.classList.add('hidden');
+      }
+    }
+
+    function render() {
+      const grid = document.getElementById('itemsGrid');
+      grid.innerHTML = '';
+
+      const filtered = items.filter(item => {
+        const isSeat = item.category === '좌석' || item.id.startsWith('S');
+        if (currentCategory === '도서' && isSeat) return false;
+        if (currentCategory === '좌석' && !isSeat) return false;
+        if (onlyAvailable && item.status !== '이용가능') return false;
+
+        if (searchQuery) {
+          const q = searchQuery.toLowerCase();
+          const matchTitle = item.title.toLowerCase().includes(q);
+          const matchAuthor = item.author && item.author.toLowerCase().includes(q);
+          const matchId = item.id.toLowerCase().includes(q);
+          if (!matchTitle && !matchAuthor && !matchId) return false;
+        }
+        return true;
+      });
+
+      if (filtered.length === 0) {
+        grid.innerHTML = '<div class="col-span-full py-12 text-center text-slate-400 text-sm">일치하는 항목이 없습니다.</div>';
+        return;
+      }
+
+      filtered.forEach(item => {
+        const isSeat = item.category === '좌석' || item.id.startsWith('S');
+        const isAvailable = item.status === '이용가능';
+
+        const card = document.createElement('div');
+        card.className = "bg-white rounded-xl border border-slate-200 p-4 flex flex-col justify-between hover:border-slate-300 shadow-xs transition-colors";
+        card.innerHTML = `
+          <div>
+            <div class="flex items-center justify-between gap-2 mb-2">
+              <span class="font-mono text-xs text-slate-400 font-semibold">[${item.id}]</span>
+              <div class="flex items-center gap-1.5">
+                <span class="px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-100 text-slate-600">${item.category}</span>
+                <span class="px-2 py-0.5 rounded text-[11px] font-bold ${isAvailable ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}">${item.status}</span>
+              </div>
+            </div>
+            <h3 class="font-bold text-slate-900 text-base leading-snug truncate" title="${item.title}">${item.title}</h3>
+            <p class="text-xs text-slate-500 mt-1 truncate">${isSeat ? (item.location || '열람실') : ('저자: ' + (item.author || '-'))}</p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-100">
+            ${isAvailable 
+              ? `<button class="btn-reserve w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer" data-id="${item.id}">예약하기</button>`
+              : `<button disabled class="w-full py-2 bg-slate-100 text-slate-400 rounded-lg text-xs font-medium cursor-not-allowed">대출중 (예약 불가)</button>`
+            }
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+
+      document.querySelectorAll('.btn-reserve').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const id = e.currentTarget.getAttribute('data-id');
+          const target = items.find(i => i.id === id);
+          if (target) openModal(target);
+        });
+      });
+    }
+
+    function openModal(item) {
+      selectedItem = item;
+      const isSeat = item.category === '좌석' || item.id.startsWith('S');
+      document.getElementById('modalItemTitle').innerText = '[' + item.id + '] ' + item.title;
+      document.getElementById('inputStartDate').value = getToday();
+      document.getElementById('inputEndDate').value = isSeat ? getToday() : getNextWeek();
+      document.getElementById('reservationModal').classList.remove('hidden');
+    }
+
+    function closeModal() {
+      document.getElementById('reservationModal').classList.add('hidden');
+      selectedItem = null;
+    }
+
+    // 예약 생성 (POST)
+    document.getElementById('reservationForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!selectedItem) return;
+
+      const userName = document.getElementById('inputName').value.trim();
+      const userEmail = document.getElementById('inputEmail').value.trim();
+      const startDate = document.getElementById('inputStartDate').value;
+      const endDate = document.getElementById('inputEndDate').value;
+
+      const submitBtn = document.getElementById('btnSubmitReservation');
+      submitBtn.disabled = true;
+      submitBtn.innerText = '처리 중...';
+
+      const postBody = {
+        action: 'createReservation',
+        user_id: userName,
+        item_id: selectedItem.id,
+        start_time: startDate,
+        end_time: endDate,
+        user_email: userEmail
+      };
+
+      try {
+        const res = await fetch(GAS_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(postBody)
+        });
+        const json = await res.json().catch(() => null);
+        if (!json || !json.success) {
+          alert('구글 시트 저장 실패:\n' + ((json && json.message) || '스프레드시트에 Reservations 탭이 없습니다.'));
+          return;
+        }
+        const resId = json.reservation_id || json.reservationId || ('RSV_' + Date.now());
+
+        userReservations.unshift({
+          reservationId: resId,
+          itemId: selectedItem.id,
+          itemTitle: selectedItem.title,
+          userName,
+          userEmail,
+          startDate,
+          endDate,
+          status: '예약중'
+        });
+        localStorage.setItem('my_reservations', JSON.stringify(userReservations));
+        selectedItem.status = '대출중';
+
+        alert('예약이 완료되었습니다!\n예약번호: ' + resId);
+        closeModal();
+        fetchItems();
+      } catch (err) {
+        console.warn(err);
+        const resId = 'RSV_' + Date.now();
+        userReservations.unshift({
+          reservationId: resId,
+          itemId: selectedItem.id,
+          itemTitle: selectedItem.title,
+          userName,
+          userEmail,
+          startDate,
+          endDate,
+          status: '예약중'
+        });
+        localStorage.setItem('my_reservations', JSON.stringify(userReservations));
+        selectedItem.status = '대출중';
+        alert('예약 신청 완료 (예약번호: ' + resId + ')');
+        closeModal();
+        render();
+        updateBadge();
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerText = '신청 완료';
+      }
+    });
+
+    // 예약 취소 (POST)
+    async function cancelReservation(resId) {
+      if (!confirm('예약번호 [' + resId + '] 예약을 취소하시겠습니까?')) return;
+      try {
+        await fetch(GAS_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'cancelReservation', reservation_id: resId })
+        });
+      } catch(e) {}
+
+      const target = userReservations.find(r => r.reservationId === resId);
+      if (target) {
+        target.status = '취소됨';
+        const item = items.find(i => i.id === target.itemId);
+        if (item) item.status = '이용가능';
+      }
+      localStorage.setItem('my_reservations', JSON.stringify(userReservations));
+      alert('예약이 정상적으로 취소되었습니다.');
+      renderMyRes();
+      render();
+      updateBadge();
+    }
+
+    function renderMyRes() {
+      const container = document.getElementById('myResList');
+      container.innerHTML = '';
+      if (userReservations.length === 0) {
+        container.innerHTML = '<div class="text-center py-8 text-slate-400 text-xs">예약 내역이 없습니다.</div>';
+        return;
+      }
+      userReservations.forEach(r => {
+        const isActive = r.status === '예약중';
+        const el = document.createElement('div');
+        el.className = "p-3 rounded-lg border border-slate-200 text-xs space-y-1 bg-slate-50/50";
+        el.innerHTML = `
+          <div class="flex justify-between items-center">
+            <span class="font-mono font-bold text-blue-700">${r.reservationId}</span>
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold ${isActive ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-slate-200 text-slate-600'}">${r.status}</span>
+          </div>
+          <div class="font-bold text-slate-900">${r.itemTitle || r.itemId}</div>
+          <div class="text-slate-500">${r.startDate} ~ ${r.endDate} | ${r.userName}</div>
+          ${isActive ? `<div class="pt-2 flex justify-end"><button onclick="cancelReservation('${r.reservationId}')" class="px-2.5 py-1 text-[11px] font-semibold text-rose-600 hover:bg-rose-50 rounded border border-rose-200 cursor-pointer">예약 취소</button></div>` : ''}
+        `;
+        container.appendChild(el);
+      });
+    }
+
+    // 검색 및 필터 이벤트
+    document.getElementById('searchInput').addEventListener('input', (e) => {
+      searchQuery = e.target.value.trim();
+      render();
+    });
+    document.getElementById('chkOnlyAvailable').addEventListener('change', (e) => {
+      onlyAvailable = e.target.checked;
+      render();
+    });
+    document.querySelectorAll('.cat-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        document.querySelectorAll('.cat-btn').forEach(b => {
+          b.className = 'cat-btn px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 cursor-pointer';
+        });
+        e.currentTarget.className = 'cat-btn px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white cursor-pointer';
+        currentCategory = e.currentTarget.getAttribute('data-cat');
+        render();
+      });
+    });
+
+    document.getElementById('btnReload').addEventListener('click', fetchItems);
+    document.getElementById('btnCloseModal').addEventListener('click', closeModal);
+    document.getElementById('btnCancelModal').addEventListener('click', closeModal);
+
+    document.getElementById('btnOpenMyRes').addEventListener('click', () => {
+      renderMyRes();
+      document.getElementById('myResModal').classList.remove('hidden');
+    });
+    document.getElementById('btnCloseMyResModal').addEventListener('click', () => {
+      document.getElementById('myResModal').classList.add('hidden');
+    });
+    document.getElementById('btnCloseMyResModal2').addEventListener('click', () => {
+      document.getElementById('myResModal').classList.add('hidden');
+    });
+
+    fetchItems();
+  </script>
+</body>
+</html>

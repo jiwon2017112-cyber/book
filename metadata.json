@@ -1,0 +1,6 @@
+{
+  "name": "도서관 및 열람실 예약 시스템",
+  "description": "구글 앱스스크립트(GAS) 및 구글 시트와 실시간 연동되는 도서관 및 열람실 예약 Single Page Application",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
